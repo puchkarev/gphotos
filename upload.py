@@ -5,9 +5,9 @@
 # or commercial.
 #
 # Usage:
-#   > ./upload.py [path to image or video file]
+#   > ./upload.py [path to image or video file] [optional album title]
 # Example:
-#   > ./upload.py /home/pi/Videos/myfideo.mp4
+#   > ./upload.py /home/pi/Videos/myvideo.mp4 MyAlbum
 #
 # Installation:
 #
@@ -15,8 +15,8 @@
 # 1) python3 (sudo apt-get install python3)
 # 2) google-api-python-client (sudo pip3 install google-api-python-client)
 # 3) google-auth-oauthlib (sudo pip3 install google-auth-oauthlib)
-# 4) Place this script in a folder (that folder will contain two additional
-#    files client_secrets.json and token.pickle discussed below).
+# 4) Place this script in a folder (that folder will contain a few additional
+#    files.
 #
 # The folder where the script resides must contain client_secret.json of type
 # OAuth 2.0 Client IDs of type Desktop. These credentials identify the
@@ -41,6 +41,15 @@
 # token.pickle file in the same folder. This script will attempt to reuse
 # and refresh credentials as much as possible, but if they expire it will
 # open the browser and ask you to login again.
+#
+# config.pickle contains the information about the albums that were created
+# it is necessary since the script does not have read permissions from
+# google photos, and is only allowed to add to albums that were created
+# using the client_secret.json on the user account associated with
+# token.pickle
+#
+# If you want to use this script for a different user, then delete the
+# token.pickle and config.pickle
 
 import os
 import sys
@@ -56,11 +65,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.errors import HttpError
 import google_auth_httplib2
 
-# Obtain Credentials (or retrieve and refresh as necessary)
+# Obtain Credentials (or retrieve and refresh as necessary).
+# Returns credentials.
 def obtain_credentials():
-  script_folder = os.path.dirname(os.path.realpath(__file__))
-  CLIENT_SECRETS_FILE = os.path.join(script_folder, 'client_secret.json')
-  USER_TOKEN_FILE = os.path.join(script_folder, 'token.pickle')
+  CLIENT_SECRETS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'client_secret.json')
+  USER_TOKEN_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'token.pickle')
   # Scopes: https://developers.google.com/photos/library/guides/authorization
   SCOPES = ['https://www.googleapis.com/auth/photoslibrary.appendonly']
   creds = None
@@ -81,7 +90,10 @@ def obtain_credentials():
       pickle.dump(creds, tokenFile)
   return creds
 
-def upload_media(file_path, creds):
+# Uploads the media file (image or video to google photos using credentials
+# If album id is specified the media will be placed in the given album.
+# Returns a create response.
+def upload_media(file_path, album_id, creds):
   # Step 1: Upload Media
   # https://developers.google.com/photos/library/guides/upload-media
   UPLOAD_URL = 'https://photoslibrary.googleapis.com/v1/uploads'
@@ -95,26 +107,74 @@ def upload_media(file_path, creds):
 
   # Step 2: Create Media
   # https://developers.google.com/photos/library/reference/rest/v1/mediaItems/batchCreate
+  create_body={
+    'newMediaItems': [{
+      'simpleMediaItem': {
+        'uploadToken': upload_response.content.decode('utf-8')
+      }
+    }]
+  }
+  # if we specified an album id, then add it to the request.
+  if album_id:
+    create_body['albumId'] = album_id
+
   service = build('photoslibrary', 'v1', credentials = creds)
-  create_response = service.mediaItems().batchCreate(
-    body={
-      'newMediaItems': [{
-        'simpleMediaItem': {
-          'uploadToken': upload_response.content.decode('utf-8')
-        }
-      }]
-    }).execute()
+  create_response = service.mediaItems().batchCreate(body=create_body).execute()
   return create_response
+
+# Create Album in google photos with a given title using credentials specified.
+def create_album(album_title, creds):
+  # https://developers.google.com/photos/library/reference/rest/v1/albums/create
+  service = build('photoslibrary', 'v1', credentials = creds)
+  create_response = service.albums().create(
+    body={
+      'album': {
+         'title': album_title
+       }
+     }).execute()
+  return create_response
+
+# Gets the id of the album with a given title, if one does not exist in the config
+# then creates one. This script has no google photos read permissions so it has to
+# keep this info in the config.
+def get_album_id(album_title, creds):
+  CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.pickle')
+  config = None
+
+  if (os.path.exists(CONFIG_FILE)):
+    with open(CONFIG_FILE, 'rb') as configFile:
+      config = pickle.load(configFile)
+  if not config:
+    config = {}
+  if 'albums' not in config:
+    config['albums'] = {}
+  if album_title not in config['albums']:
+    album_id = create_album(album_title, creds)['id']
+    config['albums'][album_title] = album_id
+
+    print('Storing new album id {0}'.format(album_id))
+    with open(CONFIG_FILE, 'wb') as configFile:
+      pickle.dump(config, configFile)
+
+  return config['albums'][album_title]
 
 # Get the credentials
 creds = obtain_credentials()
 
 # Get the file path to upload
-if len(sys.argv) != 2:
+if len(sys.argv) < 2:
   sys.exit('Need filename to upload')
 file_path = sys.argv[1]
-print('Uploading {0}'.format(file_path))
+
+# Get the optional album title
+album_title = None
+album_id = None
+if len(sys.argv) > 2:
+  album_title = sys.argv[2]
+  print('Uploading to {0}'.format(album_title))
+  album_id = get_album_id(album_title, creds)
 
 # Upload the file.
-create_response = upload_media(file_path, creds)
+print('Uploading {0}'.format(file_path))
+create_response = upload_media(file_path, album_id, creds)
 print('Response: {0}'.format(create_response['newMediaItemResults'][0]['status']['message']))
