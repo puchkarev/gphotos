@@ -18,7 +18,7 @@
 # 4) Place this script in a folder (that folder will contain a few additional
 #    files.
 #
-# The folder where the script resides must contain client_secret.json of type
+# The CONFIG folder must contain client_secret.json of type
 # OAuth 2.0 Client IDs of type Desktop. These credentials identify the
 # application itself and are not really secret, they don't give any
 # permissions to the application itself, they just identify the project to
@@ -30,7 +30,7 @@
 #    APIs & Services -> Credentials -> Create Credentials -> OAuth client ID
 #    Select type Dekstop app, Give it a name, Click Create, then OK, then
 #    Click the download button for the client_secret.json and put it in the
-#    same folder as this script.
+#    config folder.
 #
 # Next is we need to get credentials for the actual user. To do this run
 # the script with no arguments. It will open a browser and ask you to login
@@ -38,7 +38,7 @@
 # It should just ask for permissions to append/write to Google Photos.
 # Unless you already authorized the project (unlikely) it will give you
 # warnings about safety of the project. The credentials will be stored in
-# token.pickle file in the same folder. This script will attempt to reuse
+# token.pickle file in the config folder. This script will attempt to reuse
 # and refresh credentials as much as possible, but if they expire it will
 # open the browser and ask you to login again.
 #
@@ -59,17 +59,20 @@ import requests
 
 import google.oauth2.credentials
 
+from pathlib import Path
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.errors import HttpError
 import google_auth_httplib2
 
+CONFIG_FOLDER=os.path.join(str(Path.home()), '.gphotos')
+
 # Obtain Credentials (or retrieve and refresh as necessary).
 # Returns credentials.
 def obtain_credentials():
-  CLIENT_SECRETS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'client_secret.json')
-  USER_TOKEN_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'token.pickle')
+  CLIENT_SECRETS_FILE = os.path.join(CONFIG_FOLDER, 'client_secret.json')
+  USER_TOKEN_FILE = os.path.join(CONFIG_FOLDER, 'token.pickle')
   # Scopes: https://developers.google.com/photos/library/guides/authorization
   SCOPES = ['https://www.googleapis.com/auth/photoslibrary.appendonly']
   creds = None
@@ -138,7 +141,7 @@ def create_album(album_title, creds):
 # then creates one. This script has no google photos read permissions so it has to
 # keep this info in the config.
 def get_album_id(album_title, creds):
-  CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.pickle')
+  CONFIG_FILE = os.path.join(CONFIG_FOLDER, 'config.pickle')
   config = None
 
   if (os.path.exists(CONFIG_FILE)):
