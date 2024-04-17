@@ -1,7 +1,6 @@
 # Utility for uploading a file to google photos.
 # Author: Victor Puchkarev (ittechnician@gmail.com)
 # Copyright: 2020
-# License: I'm NOT allowing you to use this code for any purpose personal or commercial.
 
 import os
 import sys
