@@ -61,8 +61,3 @@ media to is the albums created by this script, and in addition this script
 does not have read permissions, so it cannot get a list of albums. So it
 stores the list of albums it creates and their associated ids in the config
 folder.
-
-# License
-
-I'm NOT allowing you to use this code for any purpose personal or commercial.
-
